@@ -1,0 +1,212 @@
+/* General Styles */
+body {
+    background-color: #f8f9fa; /* Light background */
+    color: #333; /* Dark text */
+    font-family: 'Arial', sans-serif;
+    margin: 0;
+    padding: 0;
+    line-height: 1.6;
+}
+
+.container-fluid {
+    padding: 20px;
+}
+
+/* Navbar Styles */
+.navbar-bleu {
+    background-color: #007bff; /* Blue background */
+    padding: 10px 0;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.navbar-brand {
+    color: white !important; /* White text for brand */
+    font-size: 1.5rem;
+    font-weight: bold;
+}
+
+.navbar-brand:hover {
+    color: #e0e0e0 !important; /* Lighter white on hover */
+}
+
+.navbar-toggler {
+    border-color: rgba(255, 255, 255, 0.5); /* Light border for toggler */
+}
+
+.navbar-toggler-icon {
+    background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 30 30' xmlns='http://www.w3.org/2000/svg'%3e%3cpath stroke='rgba(255, 255, 255, 0.5)' stroke-width='2' stroke-linecap='round' stroke-miterlimit='10' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
+}
+
+.nav-link {
+    color: white !important; /* White text for links */
+    font-size: 1rem;
+    margin: 0 10px;
+    transition: color 0.3s ease;
+}
+
+.nav-link:hover {
+    color: #e0e0e0 !important; /* Lighter white on hover */
+}
+
+/* Active Link Style */
+.nav-link.active {
+    font-weight: bold;
+    color: #ffffff !important; /* Bright white for active link */
+    border-bottom: 2px solid white;
+}
+
+/* Dropdown Menu Styles (if applicable) */
+.navbar .dropdown-menu {
+    background-color: #007bff; /* Blue background for dropdown */
+    border: none;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.navbar .dropdown-item {
+    color: white !important; /* White text for dropdown items */
+}
+
+.navbar .dropdown-item:hover {
+    background-color: #0056b3; /* Darker blue on hover */
+    color: white !important;
+}
+
+/* Card Styles */
+.card {
+    background-color: #ffffff;
+    border: none;
+    border-radius: 10px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    margin-bottom: 20px;
+}
+
+.card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+}
+
+.card-header {
+    background-color: #007bff; /* Blue header */
+    color: white;
+    font-size: 1.25rem;
+    font-weight: bold;
+    border-radius: 10px 10px 0 0;
+    padding: 15px;
+}
+
+.card-body {
+    padding: 20px;
+}
+
+.card-title {
+    color: #007bff; /* Blue title */
+    font-size: 2rem;
+    font-weight: bold;
+    margin-bottom: 0;
+}
+
+/* Table Styles */
+.table {
+    width: 100%;
+    margin-bottom: 0;
+    border-collapse: separate;
+    border-spacing: 0;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.table thead th {
+    background-color: #007bff; /* Blue header */
+    color: white;
+    font-weight: bold;
+    padding: 12px;
+    border-bottom: 2px solid #dee2e6;
+}
+
+.table tbody tr {
+    transition: background-color 0.3s ease;
+}
+
+.table tbody tr:hover {
+    background-color: #f1f1f1;
+}
+
+.table tbody td {
+    padding: 12px;
+    border-bottom: 1px solid #dee2e6;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .col-md-4, .col-md-8, .col-sm-6, .col-sm-12 {
+        padding: 10px;
+    }
+
+    .card-title {
+        font-size: 1.5rem;
+    }
+
+    .card-header {
+        font-size: 1.1rem;
+    }
+
+    .table thead th {
+        font-size: 0.9rem;
+    }
+
+    .table tbody td {
+        font-size: 0.9rem;
+    }
+
+    .navbar-nav {
+        margin-top: 10px;
+    }
+
+    .nav-link {
+        margin: 5px 0;
+    }
+    
+}
+
+/* user manager */
+body {
+    background-color: white;
+    color: #01082D;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.navbar, .modal-header, .btn-primary {
+    background-color: #0F2573;
+    color: white;
+}
+
+.table thead {
+    background-color: #266CA9;
+    color: white;
+}
+
+.btn-primary:hover {
+    background-color: #01082D;
+    border-color: #01082D;
+}
+
+.modal-content {
+    border-radius: 12px;
+    box-shadow: 0 4px 15px rgba(1, 8, 45, 0.3);
+}
+
+.form-control:focus {
+    border-color: #266CA9;
+    box-shadow: 0 0 8px rgba(38, 108, 169, 0.5);
+}
+
+.btn-secondary {
+    background-color: #01082D;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background-color: #0F2573;
+}
