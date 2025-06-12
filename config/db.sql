@@ -85,6 +85,16 @@ CREATE TABLE tasks (
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE ON UPDATE CASCADE,
     FOREIGN KEY (assigned_to) REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE
 );
+CREATE TABLE task_comments (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    task_id INT NOT NULL,
+    user_id INT NOT NULL,
+    comment TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE ON UPDATE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE
+);
+
 -- Supposons que l'utilisateur avec id=2 est un chef de projet (Bob Chef)
 INSERT INTO projects (name, description, start_date, end_date, progress, manager_id) VALUES
 ('Projet Alpha', 'Développement une nouvelle application web', '2025-06-01', '2025-09-30', 0, 2),

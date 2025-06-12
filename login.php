@@ -6,7 +6,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $email = trim($_POST['email']);
     $password = $_POST['password'];
 
-    // Requête pour récupérer utilisateur + rôle
     $stmt = $pdo->prepare("
         SELECT users.*, roles.name AS role_name
         FROM users
@@ -17,28 +16,22 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if ($user && password_verify($password, $user['password'])) {
-        // Pas de vérification de status car non défini dans ta table users
         $_SESSION['user_id'] = $user['id'];
         $_SESSION['role'] = $user['role_name'];
         $_SESSION['name'] = $user['name'];
-        // Redirection selon rôle
-        if ($user['role_name'] === 'admin') {
-            header("Location: dashboards/admin_dashboard.php");
-        } elseif ($user['role_name'] === 'chef_projet') {
-            header("Location: dashboards/chef_projet_dashboard.php");
-        } else {
-            header("Location: dashboards/member_dashboard.php");
-        }
+        $_SESSION['profile_pic'] = $user['profile_pic'] ?? 'default-avatar.png';
+
+        header("Location: pages/dashboard.php");
+        exit();
+    } else {
+        $error = "Invalid email or password.";
     }
 }
 ?>
 
-<!DOCTYPE html>
-<html lang="en">
 
 <?php include 'layouts/header.php'; ?>
 
-<body>
     <div class="container-fluid p-0">
         <div class="row g-0 min-vh-100">
             <!-- Left Side: Image with Gradient Overlay -->

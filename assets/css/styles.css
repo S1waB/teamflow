@@ -210,3 +210,302 @@ body {
 .btn-secondary:hover {
     background-color: #0F2573;
 }
+/* === Dashboard Container === */
+.dashboard-container {
+    padding: 30px;
+    background-color: #f9f9f9;
+}
+
+/* === Title === */
+.dashboard-container h2 {
+    margin-bottom: 30px;
+    font-size: 28px;
+    color: #2c3e50;
+}
+
+/* === Statistiques Cards === */
+.stats-grid {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin-bottom: 40px;
+}
+
+.stat-card {
+    flex: 1;
+    min-width: 220px;
+    background-color: #ffffff;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+    text-align: center;
+    transition: 0.3s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-5px);
+}
+
+.stat-card .number {
+    font-size: 32px;
+    font-weight: bold;
+    color: #2980b9;
+}
+
+.stat-card .label {
+    font-size: 16px;
+    color: #7f8c8d;
+    margin-top: 10px;
+}
+
+/* === Section Titles === */
+.section-title {
+    font-size: 22px;
+    margin: 30px 0 15px;
+    color: #34495e;
+}
+
+/* === List of Recent Projects / Tasks === */
+.item-list {
+    background-color: #fff;
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: 0 3px 6px rgba(0,0,0,0.04);
+}
+
+.item {
+    padding: 12px 0;
+    border-bottom: 1px solid #eaeaea;
+    font-size: 15px;
+    color: #2d3436;
+}
+
+.item:last-child {
+    border-bottom: none;
+}
+
+/* === Role Labels (optional) === */
+.role-badge {
+    display: inline-block;
+    background-color: #dfe6e9;
+    color: #2d3436;
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    margin-left: 10px;
+}
+    :root {
+        --primary: #4361ee;
+        --secondary: #3f37c9;
+        --success: #4cc9f0;
+        --info: #4895ef;
+        --light: #f8f9fa;
+        --dark: #212529;
+        --gray: #6c757d;
+        --light-gray: #e9ecef;
+        --border: #dee2e6;
+        --card-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    }
+
+    body {
+        font-family: 'Poppins', sans-serif;
+        background-color: #f5f7fb;
+        color: #333;
+    }
+
+    .sidebar {
+        background: linear-gradient(180deg, var(--primary), var(--secondary));
+        color: white;
+        height: 100vh;
+        position: fixed;
+        padding-top: 20px;
+        box-shadow: 3px 0 10px rgba(0, 0, 0, 0.1);
+        z-index: 1000;
+    }
+
+    .sidebar .nav-link {
+        color: rgba(255, 255, 255, 0.8);
+        padding: 12px 20px;
+        margin: 5px 15px;
+        border-radius: 8px;
+        transition: all 0.3s;
+    }
+
+    .sidebar .nav-link:hover,
+    .sidebar .nav-link.active {
+        background-color: rgba(255, 255, 255, 0.15);
+        color: white;
+    }
+
+    .sidebar .nav-link i {
+        margin-right: 10px;
+        width: 24px;
+        text-align: center;
+    }
+
+    .main-content {
+        margin-left: 250px;
+        padding: 20px;
+        transition: all 0.3s;
+    }
+
+    .dashboard-header {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 25px;
+        box-shadow: var(--card-shadow);
+    }
+
+    .stat-card {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 25px;
+        box-shadow: var(--card-shadow);
+        transition: transform 0.3s;
+        height: 100%;
+    }
+
+    .stat-card:hover {
+        transform: translateY(-5px);
+    }
+
+    .stat-card .icon {
+        width: 60px;
+        height: 60px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        margin-bottom: 15px;
+    }
+
+    .stat-card .count {
+        font-size: 32px;
+        font-weight: 700;
+        margin-bottom: 5px;
+    }
+
+    .stat-card .title {
+        font-size: 16px;
+        color: var(--gray);
+        margin-bottom: 0;
+    }
+
+    .card {
+        border: none;
+        border-radius: 12px;
+        box-shadow: var(--card-shadow);
+        margin-bottom: 25px;
+    }
+
+    .card-header {
+        background: white;
+        border-bottom: 1px solid var(--border);
+        padding: 15px 20px;
+        border-radius: 12px 12px 0 0 !important;
+        font-weight: 600;
+    }
+
+    .list-group-item {
+        border: none;
+        border-bottom: 1px solid var(--border);
+        padding: 15px 20px;
+    }
+
+    .list-group-item:last-child {
+        border-bottom: none;
+    }
+
+    .project-item,
+    .task-item {
+        display: flex;
+        align-items: center;
+        padding: 12px 0;
+        border-bottom: 1px solid var(--light-gray);
+    }
+
+    .project-item:last-child,
+    .task-item:last-child {
+        border-bottom: none;
+    }
+
+    .status-badge {
+        padding: 5px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 500;
+    }
+
+    .status-todo {
+        background-color: #e9ecef;
+        color: var(--dark);
+    }
+
+    .status-inprogress {
+        background-color: #fff3cd;
+        color: #856404;
+    }
+
+    .status-finished {
+        background-color: #d4edda;
+        color: #155724;
+    }
+
+    .chart-container {
+        position: relative;
+        height: 250px;
+        width: 100%;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+        font-weight: 600;
+    }
+
+    .welcome-text {
+        color: var(--primary);
+        font-weight: 600;
+        margin-bottom: 0;
+    }
+
+    .section-title {
+        position: relative;
+        padding-bottom: 10px;
+        margin-bottom: 20px;
+    }
+
+    .section-title:after {
+        content: '';
+        position: absolute;
+        left: 0;
+        bottom: 0;
+        height: 3px;
+        width: 50px;
+        background: var(--primary);
+        border-radius: 3px;
+    }
+
+    @media (max-width: 768px) {
+        .sidebar {
+            width: 70px;
+        }
+
+        .sidebar .nav-link span {
+            display: none;
+        }
+
+        .sidebar .nav-link i {
+            margin-right: 0;
+        }
+
+        .main-content {
+            margin-left: 70px;
+        }
+    }
