@@ -647,20 +647,19 @@ include '../layouts/header.php';
         editButtons.forEach(button => {
             button.addEventListener('click', () => {
                 const taskData = JSON.parse(button.getAttribute('data-task'));
+                console.log('Task data:', taskData); // Debug log
                 
                 // Remplir tous les champs avec les données existantes
                 document.getElementById('editTaskId').value = taskData.id;
                 document.getElementById('editTitle').value = taskData.title;
                 document.getElementById('editDescription').value = taskData.description;
-                document.getElementById('editStartDate').value = taskData.start_date;
-                document.getElementById('editDueDate').value = taskData.due_date;
+                document.getElementById('editStatus').value = taskData.status;
                 document.getElementById('editProject').value = taskData.project_id;
                 document.getElementById('editAssignedTo').value = taskData.assigned_to || '';
-                document.getElementById('editStatus').value = taskData.status;
                 document.getElementById('editProgress').value = taskData.progress;
                 document.getElementById('editProgressValue').textContent = `${taskData.progress}%`;
 
-                // S'assurer que les dates sont au bon format YYYY-MM-DD
+                // Formater les dates au format YYYY-MM-DD
                 const formatDate = (dateString) => {
                     if (!dateString) return '';
                     const date = new Date(dateString);
@@ -669,7 +668,68 @@ include '../layouts/header.php';
 
                 document.getElementById('editStartDate').value = formatDate(taskData.start_date);
                 document.getElementById('editDueDate').value = formatDate(taskData.due_date);
+
+                // Mettre à jour les options du select "Assigner à" en fonction du projet sélectionné
+                const projectId = taskData.project_id;
+                const assignedToSelect = document.getElementById('editAssignedTo');
+                
+                // Vider le select
+                assignedToSelect.innerHTML = '<option value="">-- Non assigné --</option>';
+                
+                // Charger les membres du projet via AJAX
+                fetch(`../controllers/tasks_controller.php?get_project_members=${projectId}`)
+                    .then(response => response.json())
+                    .then(members => {
+                        if (Array.isArray(members)) {
+                            members.forEach(member => {
+                                const option = document.createElement('option');
+                                option.value = member.id;
+                                option.textContent = member.name;
+                                if (member.id == taskData.assigned_to) {
+                                    option.selected = true;
+                                }
+                                assignedToSelect.appendChild(option);
+                            });
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Erreur lors du chargement des membres:', error);
+                    });
             });
+        });
+        
+        // Gestionnaire pour le changement de projet dans le modal d'édition
+        document.getElementById('editProject').addEventListener('change', function() {
+            const projectId = this.value;
+            const assignedToSelect = document.getElementById('editAssignedTo');
+            
+            // Vider le select
+            assignedToSelect.innerHTML = '<option value="">-- Non assigné --</option>';
+            
+            if (!projectId) {
+                assignedToSelect.disabled = true;
+                return;
+            }
+            
+            // Activer le select
+            assignedToSelect.disabled = false;
+            
+            // Charger les membres du projet via AJAX
+            fetch(`../controllers/tasks_controller.php?get_project_members=${projectId}`)
+                .then(response => response.json())
+                .then(members => {
+                    if (Array.isArray(members)) {
+                        members.forEach(member => {
+                            const option = document.createElement('option');
+                            option.value = member.id;
+                            option.textContent = member.name;
+                            assignedToSelect.appendChild(option);
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Erreur lors du chargement des membres:', error);
+                });
         });
         
         // Quick Update Modal Functionality
