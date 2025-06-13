@@ -11,14 +11,46 @@ $response = [
 // Delete task
 if (isset($_GET['delete_task_id'])) {
     $delete_id = (int) $_GET['delete_task_id'];
-    $stmt = $pdo->prepare("DELETE FROM tasks WHERE id = ?");
-    if ($stmt->execute([$delete_id])) {
-        $response['success'] = true;
+    
+    // Récupérer le project_id de la tâche avant de la supprimer
+    $stmt = $pdo->prepare("SELECT project_id FROM tasks WHERE id = ?");
+    $stmt->execute([$delete_id]);
+    $task = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if ($task) {
+        $stmt = $pdo->prepare("DELETE FROM tasks WHERE id = ?");
+        if ($stmt->execute([$delete_id])) {
+            // Mettre à jour le progrès du projet après la suppression de la tâche
+            updateProjectProgress($pdo, $task['project_id']);
+            $response['success'] = true;
+        } else {
+            $response['error'] = "Failed to delete task.";
+        }
     } else {
-        $response['error'] = "Failed to delete task.";
+        $response['error'] = "Task not found.";
     }
+    
     header("Location: " . $response['redirect']);
     exit;
+}
+
+// Fonction pour mettre à jour le progrès du projet
+function updateProjectProgress($pdo, $project_id) {
+    // Calculer la moyenne du progrès des tâches
+    $stmt = $pdo->prepare("
+        SELECT AVG(progress) as avg_progress, COUNT(*) as total_tasks
+        FROM tasks 
+        WHERE project_id = ?
+    ");
+    $stmt->execute([$project_id]);
+    $result = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    // Mettre à jour le progrès du projet
+    if ($result['total_tasks'] > 0) {
+        $progress = round($result['avg_progress'], 2);
+        $stmt = $pdo->prepare("UPDATE projects SET progress = ? WHERE id = ?");
+        $stmt->execute([$progress, $project_id]);
+    }
 }
 
 // Add task
@@ -36,6 +68,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_task'])) {
         $stmt = $pdo->prepare("INSERT INTO tasks (title, description, status, progress, start_date, due_date, project_id, assigned_to) 
                               VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
         if ($stmt->execute([$title, $description, $status, $progress, $start_date, $due_date, $project_id, $assigned_to])) {
+            // Mettre à jour le progrès du projet après l'ajout d'une tâche
+            updateProjectProgress($pdo, $project_id);
             $response['success'] = true;
         } else {
             $response['error'] = "Failed to add task.";
@@ -69,6 +103,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_task'])) {
                              start_date = ?, due_date = ?, project_id = ?, assigned_to = ? 
                              WHERE id = ?");
         if ($stmt->execute([$title, $description, $status, $progress, $start_date, $due_date, $project_id, $assigned_to, $task_id])) {
+            // Mettre à jour le progrès du projet après la modification d'une tâche
+            updateProjectProgress($pdo, $project_id);
             $response['success'] = true;
         } else {
             $response['error'] = "Failed to update task.";
@@ -92,12 +128,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status'])) {
     $progress = (float) ($_POST['progress'] ?? 0);
 
     if ($task_id && $status) {
-        $stmt = $pdo->prepare("UPDATE tasks SET status = ?, progress = ? WHERE id = ?");
-        if ($stmt->execute([$status, $progress, $task_id])) {
-            $response['success'] = true;
-            $response['redirect'] = "../pages/tasks_manager.php?success=Status+mis+à+jour";
+        // Récupérer le project_id de la tâche
+        $stmt = $pdo->prepare("SELECT project_id FROM tasks WHERE id = ?");
+        $stmt->execute([$task_id]);
+        $task = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if ($task) {
+            $stmt = $pdo->prepare("UPDATE tasks SET status = ?, progress = ? WHERE id = ?");
+            if ($stmt->execute([$status, $progress, $task_id])) {
+                // Mettre à jour le progrès du projet après la mise à jour du statut
+                updateProjectProgress($pdo, $task['project_id']);
+                $response['success'] = true;
+                $response['redirect'] = "../pages/tasks_manager.php?success=Status+mis+à+jour";
+            } else {
+                $response['error'] = "Failed to update task status.";
+            }
         } else {
-            $response['error'] = "Failed to update task status.";
+            $response['error'] = "Task not found.";
         }
     } else {
         $response['error'] = "Données manquantes.";
@@ -193,6 +240,30 @@ if (isset($_GET['get_comments'])) {
     } catch (PDOException $e) {
         header('Content-Type: application/json');
         echo json_encode(['error' => 'Erreur lors de la récupération des commentaires']);
+    }
+    exit;
+}
+
+// Récupérer les membres d'un projet
+if (isset($_GET['get_project_members'])) {
+    $project_id = (int)$_GET['get_project_members'];
+    
+    try {
+        $stmt = $pdo->prepare("
+            SELECT DISTINCT u.id, u.name
+            FROM users u
+            JOIN project_members pm ON u.id = pm.member_id
+            WHERE pm.project_id = ?
+            ORDER BY u.name
+        ");
+        $stmt->execute([$project_id]);
+        $members = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        header('Content-Type: application/json');
+        echo json_encode($members);
+    } catch (PDOException $e) {
+        header('Content-Type: application/json');
+        echo json_encode(['error' => 'Erreur lors de la récupération des membres du projet']);
     }
     exit;
 }

@@ -113,7 +113,9 @@ include '../layouts/header.php';
                     <table class="table table-hover table-striped align-middle mb-0">
                         <thead class="table-light">
                             <tr>
+                                <?php if ($user_role === 'admin'): ?>
                                 <th>ID</th>
+                                <?php endif; ?>
                                 <th>Nom</th>
                                 <th>Description</th>
                                 <th>Manager</th>
@@ -125,17 +127,25 @@ include '../layouts/header.php';
                         <tbody>
                             <?php foreach ($projects as $project):
                                 // Restreindre les projets selon le rôle
-                                if (
-                                    ($user_role === 'membre' && $project['manager_id'] !== $current_user_id) ||
-                                    ($user_role === 'chef_projet' && $project['manager_id'] !== $current_user_id)
-                                ) {
+                                if ($user_role === 'membre') {
+                                    // Vérifier si le membre est assigné au projet
+                                    $stmt = $pdo->prepare("SELECT COUNT(*) FROM project_members WHERE project_id = ? AND member_id = ?");
+                                    $stmt->execute([$project['id'], $current_user_id]);
+                                    $is_member = $stmt->fetchColumn() > 0;
+                                    
+                                    if (!$is_member) {
+                                        continue; // Passer au projet suivant si le membre n'est pas assigné
+                                    }
+                                } else if ($user_role === 'chef_projet' && $project['manager_id'] !== $current_user_id) {
                                     continue; // Passer au projet suivant si ce n'est pas le sien
                                 }
                                 $progress = (float)$project['progress'];
                                 $progressClass = $progress >= 80 ? 'bg-success' : ($progress >= 50 ? 'bg-info' : ($progress >= 30 ? 'bg-warning' : 'bg-danger'));
                             ?>
                                 <tr>
+                                    <?php if ($user_role === 'admin'): ?>
                                     <td><?= $project['id'] ?></td>
+                                    <?php endif; ?>
                                     <td>
                                         <strong><?= htmlspecialchars($project['name']) ?></strong>
                                     </td>
@@ -163,6 +173,7 @@ include '../layouts/header.php';
                                             title="Voir les détails">
                                             <i class="bi bi-eye"></i>
                                         </a>
+                                        <?php if ($user_role === 'admin'): ?>
                                         <button class="btn btn-sm btn-outline-primary me-2 edit-project-btn"
                                             data-bs-toggle="modal"
                                             data-bs-target="#editProjectModal"
@@ -174,6 +185,7 @@ include '../layouts/header.php';
                                             class="btn btn-sm btn-outline-danger" title="Supprimer">
                                             <i class="bi bi-trash-fill"></i>
                                         </a>
+                                        <?php endif; ?>     
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
@@ -273,7 +285,13 @@ include '../layouts/header.php';
                                 <?php endforeach; ?>
                             </select>
                         </div>
-                        
+                        <div class="col-md-12">
+                            <label for="editProgressInput" class="form-label">Progrès <span class="text-danger">*</span></label>
+                            <div class="d-flex align-items-center">
+                                <input type="range" class="form-range flex-grow-1 me-2" id="editProgressInput" name="progress" min="0" max="100" step="1" required>
+                                <span id="editProgressValue" class="badge bg-primary">0%</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -286,28 +304,13 @@ include '../layouts/header.php';
 </div>
 <script>
     document.addEventListener('DOMContentLoaded', () => {
-        // Progress slider for add modal
-        const progressInput = document.getElementById('progressInput');
-        const progressValue = document.getElementById('progressValue');
-
-        progressInput.addEventListener('input', () => {
-            progressValue.textContent = `${progressInput.value}%`;
-        });
-
-        // Progress slider for edit modal
-        const editProgressInput = document.getElementById('editProgressInput');
-        const editProgressValue = document.getElementById('editProgressValue');
-
-        editProgressInput.addEventListener('input', () => {
-            editProgressValue.textContent = `${editProgressInput.value}%`;
-        });
-
         // Edit Project Modal Functionality
         const editButtons = document.querySelectorAll('.edit-project-btn');
         editButtons.forEach(button => {
             button.addEventListener('click', () => {
                 const projectData = JSON.parse(button.getAttribute('data-project'));
-
+                
+                // Remplir tous les champs du formulaire
                 document.getElementById('editProjectId').value = projectData.id;
                 document.getElementById('editProjectName').value = projectData.name;
                 document.getElementById('editProjectDescription').value = projectData.description;
@@ -315,8 +318,16 @@ include '../layouts/header.php';
                 document.getElementById('editEndDate').value = projectData.end_date;
                 document.getElementById('editManagerSelect').value = projectData.manager_id;
                 document.getElementById('editProgressInput').value = projectData.progress;
-                editProgressValue.textContent = `${projectData.progress}%`;
+                document.getElementById('editProgressValue').textContent = `${projectData.progress}%`;
             });
+        });
+
+        // Mettre à jour l'affichage du pourcentage lors du déplacement du curseur
+        const editProgressInput = document.getElementById('editProgressInput');
+        const editProgressValue = document.getElementById('editProgressValue');
+
+        editProgressInput.addEventListener('input', () => {
+            editProgressValue.textContent = `${editProgressInput.value}%`;
         });
     });
 </script>

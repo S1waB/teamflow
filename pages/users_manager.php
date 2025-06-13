@@ -7,7 +7,7 @@ $filter_role = isset($_GET['filter_role']) ? (int) $_GET['filter_role'] : 0;
 
 $sql = "
     SELECT u.id, u.name, u.email, r.name AS role_name, s.name AS specialty_name, 
-           u.role_id, u.profile_pic
+           u.role_id, u.profile_pic, u.specialty_id
     FROM users u
     JOIN roles r ON u.role_id = r.id
     LEFT JOIN specialties s ON u.specialty_id = s.id

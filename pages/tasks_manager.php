@@ -65,6 +65,77 @@ if ($user_role === 'membre') {
     $projects = $pdo->query("SELECT id, name FROM projects ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
 }
 
+// Vérifier si la table project_members existe
+$tableExists = $pdo->query("SHOW TABLES LIKE 'project_members'")->rowCount() > 0;
+
+if (!$tableExists) {
+    try {
+        // Temporaire: Supprimer la table si elle existe pour s'assurer de la bonne structure
+        $pdo->exec("DROP TABLE IF EXISTS project_members");
+
+        // Créer la table project_members
+        $pdo->exec("CREATE TABLE project_members (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            project_id INT NOT NULL,
+            member_id INT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+            FOREIGN KEY (member_id) REFERENCES users(id) ON DELETE CASCADE,
+            UNIQUE KEY unique_project_user (project_id, member_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        
+        // Ajouter des membres de test
+        $all_projects = $pdo->query("SELECT id FROM projects")->fetchAll(PDO::FETCH_COLUMN);
+        $all_users = $pdo->query("SELECT id FROM users")->fetchAll(PDO::FETCH_COLUMN);
+        
+        if (!empty($all_projects) && !empty($all_users)) {
+            $stmt = $pdo->prepare("INSERT INTO project_members (project_id, member_id) VALUES (?, ?)");
+            
+            foreach ($all_projects as $project_id) {
+                // Sélectionner 2-3 utilisateurs aléatoires pour chaque projet
+                $random_users = array_rand($all_users, min(3, count($all_users)));
+                if (!is_array($random_users)) {
+                    $random_users = [$random_users];
+                }
+                
+                foreach ($random_users as $user_index) {
+                    $user_id = $all_users[$user_index];
+                    $stmt->execute([$project_id, $user_id]);
+                }
+            }
+        }
+    } catch (PDOException $e) {
+        error_log("Erreur lors de la création de la table project_members: " . $e->getMessage());
+    }
+}
+
+// Récupérer les membres de chaque projet
+$project_members = [];
+try {
+    $stmt = $pdo->prepare("
+        SELECT DISTINCT p.id as project_id, u.id as user_id, u.name as user_name
+        FROM projects p
+        LEFT JOIN project_members pm ON p.id = pm.project_id
+        LEFT JOIN users u ON pm.member_id = u.id
+        WHERE u.id IS NOT NULL
+        ORDER BY p.id, u.name
+    ");
+    $stmt->execute();
+    
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        if (!isset($project_members[$row['project_id']])) {
+            $project_members[$row['project_id']] = [];
+        }
+        $project_members[$row['project_id']][] = [
+            'id' => $row['user_id'],
+            'name' => $row['user_name']
+        ];
+    }
+} catch (PDOException $e) {
+    error_log("Erreur lors de la récupération des membres des projets: " . $e->getMessage());
+    $project_members = [];
+}
+
 // Fetch users - Pour les membres, ne montrer que leur propre profil
 if ($user_role === 'membre') {
     $sql_users = "SELECT id, name FROM users WHERE id = :user_id";
@@ -286,14 +357,7 @@ include '../layouts/header.php';
                             <label for="titleAdd" class="form-label">Titre <span class="text-danger">*</span></label>
                             <input type="text" class="form-control" id="titleAdd" name="title" required>
                         </div>
-                        <div class="col-md-4">
-                            <label for="statusAdd" class="form-label">Statut</label>
-                            <select class="form-select" id="statusAdd" name="status">
-                                <option value="To-do" selected>À faire</option>
-                                <option value="in progress">En cours</option>
-                                <option value="finished">Terminé</option>
-                            </select>
-                        </div>
+                    
                         <div class="col-md-12">
                             <label for="descriptionAdd" class="form-label">Description</label>
                             <textarea class="form-control" id="descriptionAdd" name="description" rows="3"></textarea>
@@ -324,15 +388,7 @@ include '../layouts/header.php';
                                 <?php endforeach; ?>
                             </select>
                         </div>
-                        <div class="col-md-12">
-                            <label for="progressAdd" class="form-label">Progrès (%)</label>
-                            <input type="range" class="form-range" id="progressAdd" name="progress" min="0" max="100" value="0">
-                            <div class="d-flex justify-content-between">
-                                <small>0%</small>
-                                <small id="progressValueAdd">0%</small>
-                                <small>100%</small>
-                            </div>
-                        </div>
+                        
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -471,7 +527,10 @@ include '../layouts/header.php';
             </div>
             <div class="modal-body">
                 <div id="commentsHistory" class="comments-list">
-                    <!-- Les commentaires seront chargés ici dynamiquement -->
+                    <div class="no-comments text-center py-4 text-muted">
+                        <i class="bi bi-chat-square-text fs-1"></i>
+                        <p class="mt-2">Aucun commentaire pour le moment</p>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">
@@ -510,6 +569,52 @@ include '../layouts/header.php';
 
 <script>
     document.addEventListener('DOMContentLoaded', () => {
+        // Gestionnaire pour le changement de projet dans le modal d'ajout
+        const projectSelect = document.getElementById('projectAdd');
+        const assignedToSelect = document.getElementById('assignedToAdd');
+        
+        // Fonction pour mettre à jour les options du select "Assigner à"
+        function updateAssignedToOptions(projectId) {
+            // Vider le select
+            assignedToSelect.innerHTML = '<option value="" selected>-- Non assigné --</option>';
+            
+            if (!projectId) {
+                // Si aucun projet n'est sélectionné, désactiver le select
+                assignedToSelect.disabled = true;
+                return;
+            }
+            
+            // Activer le select
+            assignedToSelect.disabled = false;
+            
+            // Charger les membres du projet via AJAX
+            fetch(`../controllers/tasks_controller.php?get_project_members=${projectId}`)
+                .then(response => response.json())
+                .then(members => {
+                    if (Array.isArray(members)) {
+                        members.forEach(member => {
+                            const option = document.createElement('option');
+                            option.value = member.id;
+                            option.textContent = member.name;
+                            assignedToSelect.appendChild(option);
+                        });
+                    } else {
+                        console.error('Erreur lors du chargement des membres:', members.error);
+                    }
+                })
+                .catch(error => {
+                    console.error('Erreur lors du chargement des membres:', error);
+                });
+        }
+        
+        // Écouter les changements sur le select de projet
+        projectSelect.addEventListener('change', function() {
+            updateAssignedToOptions(this.value);
+        });
+        
+        // Initialiser l'état du select "Assigner à"
+        updateAssignedToOptions(projectSelect.value);
+        
         // Progress slider for add modal
         const progressAdd = document.getElementById('progressAdd');
         const progressValueAdd = document.getElementById('progressValueAdd');
@@ -537,6 +642,7 @@ include '../layouts/header.php';
             button.addEventListener('click', () => {
                 const taskData = JSON.parse(button.getAttribute('data-task'));
                 
+                // Remplir tous les champs avec les données existantes
                 document.getElementById('editTaskId').value = taskData.id;
                 document.getElementById('editTitle').value = taskData.title;
                 document.getElementById('editDescription').value = taskData.description;
@@ -546,7 +652,17 @@ include '../layouts/header.php';
                 document.getElementById('editAssignedTo').value = taskData.assigned_to || '';
                 document.getElementById('editStatus').value = taskData.status;
                 document.getElementById('editProgress').value = taskData.progress;
-                editProgressValue.textContent = `${taskData.progress}%`;
+                document.getElementById('editProgressValue').textContent = `${taskData.progress}%`;
+
+                // S'assurer que les dates sont au bon format YYYY-MM-DD
+                const formatDate = (dateString) => {
+                    if (!dateString) return '';
+                    const date = new Date(dateString);
+                    return date.toISOString().split('T')[0];
+                };
+
+                document.getElementById('editStartDate').value = formatDate(taskData.start_date);
+                document.getElementById('editDueDate').value = formatDate(taskData.due_date);
             });
         });
         

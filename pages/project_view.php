@@ -9,6 +9,106 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
+// Gestion de l'ajout de tâche
+if (isset($_POST['add_task']) && isset($_POST['project_id'])) {
+    try {
+        $stmt = $pdo->prepare("INSERT INTO tasks (project_id, title, description, start_date, due_date, progress, assigned_to, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'To-do')");
+        if ($stmt->execute([
+            $_POST['project_id'],
+            $_POST['title'],
+            $_POST['description'],
+            $_POST['start_date'],
+            $_POST['due_date'],
+            $_POST['progress'],
+            $_POST['assigned_to'] ?: null
+        ])) {
+            header("Location: project_view.php?id=" . $_POST['project_id'] . "&success=Tâche ajoutée avec succès");
+        } else {
+            throw new Exception("Erreur lors de l'ajout de la tâche");
+        }
+    } catch (Exception $e) {
+        error_log("Erreur lors de l'ajout de la tâche: " . $e->getMessage());
+        header("Location: project_view.php?id=" . $_POST['project_id'] . "&error=" . urlencode($e->getMessage()));
+    }
+    exit;
+}
+
+// Gestion de l'ajout de commentaire
+if (isset($_POST['add_comment']) && isset($_POST['task_id']) && isset($_POST['comment'])) {
+    try {
+        // Vérifier si la table task_comments existe, sinon la créer
+        $pdo->exec("CREATE TABLE IF NOT EXISTS task_comments (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            task_id INT NOT NULL,
+            user_id INT NOT NULL,
+            comment TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE ON UPDATE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE
+        )");
+
+        // Vérifier si la tâche existe
+        $check_task = $pdo->prepare("SELECT id FROM tasks WHERE id = ?");
+        $check_task->execute([$_POST['task_id']]);
+        if (!$check_task->fetch()) {
+            throw new Exception("La tâche n'existe pas");
+        }
+
+        $stmt = $pdo->prepare("INSERT INTO task_comments (task_id, user_id, comment) VALUES (?, ?, ?)");
+        if ($stmt->execute([$_POST['task_id'], $_SESSION['user_id'], $_POST['comment']])) {
+            // Redirection vers la même page pour éviter la soumission multiple du formulaire
+            header("Location: project_view.php?id=" . $_POST['project_id'] . "&success=Commentaire ajouté avec succès");
+        } else {
+            throw new Exception("Erreur lors de l'exécution de la requête");
+        }
+    } catch (Exception $e) {
+        error_log("Erreur lors de l'ajout du commentaire: " . $e->getMessage());
+        header("Location: project_view.php?id=" . $_POST['project_id'] . "&error=" . urlencode($e->getMessage()));
+    }
+    exit;
+}
+
+// Gestion de la modification de tâche
+if (isset($_POST['edit_task']) && isset($_POST['task_id'])) {
+    try {
+        // Vérifier si la tâche existe
+        $check_task = $pdo->prepare("SELECT id FROM tasks WHERE id = ? AND project_id = ?");
+        $check_task->execute([$_POST['task_id'], $_POST['project_id']]);
+        if (!$check_task->fetch()) {
+            throw new Exception("La tâche n'existe pas ou n'appartient pas à ce projet");
+        }
+
+        // Mettre à jour la tâche
+        $stmt = $pdo->prepare("UPDATE tasks SET 
+            title = ?, 
+            description = ?, 
+            start_date = ?, 
+            due_date = ?, 
+            progress = ?, 
+            assigned_to = ? 
+            WHERE id = ? AND project_id = ?");
+            
+        if ($stmt->execute([
+            $_POST['title'],
+            $_POST['description'],
+            $_POST['start_date'],
+            $_POST['due_date'],
+            $_POST['progress'],
+            $_POST['assigned_to'] ?: null,
+            $_POST['task_id'],
+            $_POST['project_id']
+        ])) {
+            header("Location: project_view.php?id=" . $_POST['project_id'] . "&success=Tâche modifiée avec succès");
+        } else {
+            throw new Exception("Erreur lors de la modification de la tâche");
+        }
+    } catch (Exception $e) {
+        error_log("Erreur lors de la modification de la tâche: " . $e->getMessage());
+        header("Location: project_view.php?id=" . $_POST['project_id'] . "&error=" . urlencode($e->getMessage()));
+    }
+    exit;
+}
+
 // Récupération du rôle de l'utilisateur
 $stmt = $pdo->prepare("SELECT r.name as role_name FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = ?");
 $stmt->execute([$_SESSION['user_id']]);
@@ -107,6 +207,20 @@ include '../layouts/header.php';
                     <i class="bi bi-arrow-left me-1"></i> Retour aux projets
                 </a>
             </div>
+
+            <?php if (isset($_GET['error'])): ?>
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                    <?= htmlspecialchars($_GET['error']) ?>
+                </div>
+            <?php endif; ?>
+
+            <?php if (isset($_GET['success'])): ?>
+                <div class="alert alert-success">
+                    <i class="bi bi-check-circle-fill me-2"></i>
+                    <?= htmlspecialchars($_GET['success']) ?>
+                </div>
+            <?php endif; ?>
 
             <?php if (!empty($error)): ?>
                 <div class="alert alert-danger"><?= $error ?></div>
@@ -375,7 +489,7 @@ include '../layouts/header.php';
 <div class="modal fade" id="addTaskModal" tabindex="-1" aria-labelledby="addTaskModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
-            <form action="../controllers/tasks_controller.php" method="POST">
+            <form action="project_view.php?id=<?= $project_id ?>" method="POST">
                 <input type="hidden" name="project_id" value="<?= $project_id ?>">
                 <div class="modal-header bg-primary text-white">
                     <h5 class="modal-title" id="addTaskModalLabel">
@@ -436,7 +550,7 @@ include '../layouts/header.php';
 <div class="modal fade" id="editTaskModal" tabindex="-1" aria-labelledby="editTaskModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
-            <form action="../controllers/tasks_controller.php" method="POST">
+            <form action="project_view.php?id=<?= $project_id ?>" method="POST">
                 <input type="hidden" name="project_id" value="<?= $project_id ?>">
                 <input type="hidden" name="task_id" id="editTaskId">
                 <div class="modal-header bg-warning text-dark">
@@ -507,6 +621,10 @@ include '../layouts/header.php';
             <div class="modal-body">
                 <div id="commentsHistory" class="comments-list">
                     <!-- Les commentaires seront chargés ici dynamiquement -->
+                    <div class="no-comments text-center py-4 text-muted">
+                        <i class="bi bi-chat-square-text fs-1"></i>
+                        <p class="mt-2">Aucun commentaire pour le moment</p>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">
@@ -520,8 +638,9 @@ include '../layouts/header.php';
 <div class="modal fade" id="addCommentModal" tabindex="-1" aria-labelledby="addCommentModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
-            <form action="../controllers/tasks_controller.php" method="POST">
+            <form action="project_view.php?id=<?= $project_id ?>" method="POST">
                 <input type="hidden" name="task_id" id="commentTaskId">
+                <input type="hidden" name="project_id" value="<?= $project_id ?>">
                 <div class="modal-header bg-success text-white">
                     <h5 class="modal-title" id="addCommentModalLabel">
                         <i class="bi bi-chat-dots"></i> Ajouter un commentaire
