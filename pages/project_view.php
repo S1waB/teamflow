@@ -277,10 +277,10 @@ include '../layouts/header.php';
                             </div>
                             <?php if ($user_role === 'admin' || $user_role === 'chef_projet'): ?>
                                 <div class="d-grid gap-2">
-                                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addTaskModal">
+                                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addTaskModal" <?= $days_remaining === 0 ? 'disabled' : '' ?>>
                                         <i class="bi bi-plus-circle me-1"></i> Ajouter une tâche
                                     </button>
-                                    <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addMemberModal">
+                                    <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addMemberModal" <?= $days_remaining === 0 ? 'disabled' : '' ?>>
                                         <i class="bi bi-person-plus me-1"></i> Ajouter un membre
                                     </button>
                                 </div>

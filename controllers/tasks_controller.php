@@ -36,21 +36,62 @@ if (isset($_GET['delete_task_id'])) {
 
 // Fonction pour mettre à jour le progrès du projet
 function updateProjectProgress($pdo, $project_id) {
-    // Calculer la moyenne du progrès des tâches
+    // Récupérer toutes les tâches du projet
     $stmt = $pdo->prepare("
-        SELECT AVG(progress) as avg_progress, COUNT(*) as total_tasks
+        SELECT COUNT(*) as total_tasks,
+               SUM(CASE WHEN status = 'finished' THEN 1 ELSE 0 END) as finished_tasks,
+               SUM(progress) as total_progress
         FROM tasks 
         WHERE project_id = ?
     ");
     $stmt->execute([$project_id]);
     $result = $stmt->fetch(PDO::FETCH_ASSOC);
     
-    // Mettre à jour le progrès du projet
+    // Calculer le progrès du projet
     if ($result['total_tasks'] > 0) {
-        $progress = round($result['avg_progress'], 2);
+        if ($result['finished_tasks'] == $result['total_tasks']) {
+            // Si toutes les tâches sont terminées, le progrès est à 100%
+            $progress = 100;
+        } else {
+            // Sinon, calculer la moyenne du progrès des tâches
+            $progress = round($result['total_progress'] / $result['total_tasks'], 2);
+        }
+        
+        // Mettre à jour le progrès du projet
         $stmt = $pdo->prepare("UPDATE projects SET progress = ? WHERE id = ?");
         $stmt->execute([$progress, $project_id]);
     }
+}
+
+// Fonction pour mettre à jour le progrès d'une tâche en fonction de son statut
+function updateTaskProgress($pdo, $task_id, $status) {
+    $stmt = $pdo->prepare("SELECT progress FROM tasks WHERE id = ?");
+    $stmt->execute([$task_id]);
+    $current_progress = $stmt->fetchColumn();
+
+    $new_progress = $current_progress;
+    switch ($status) {
+        case 'finished':
+            $new_progress = 100;
+            break;
+        case 'in progress':
+            if ($current_progress < 50) {
+                $new_progress = 50;
+            }
+            break;
+        case 'To-do':
+            if ($current_progress > 0) {
+                $new_progress = 0;
+            }
+            break;
+    }
+
+    if ($new_progress != $current_progress) {
+        $stmt = $pdo->prepare("UPDATE tasks SET progress = ? WHERE id = ?");
+        $stmt->execute([$new_progress, $task_id]);
+    }
+
+    return $new_progress;
 }
 
 // Add task
@@ -99,13 +140,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_task'])) {
     $progress = (float) ($_POST['progress'] ?? 0);
 
     if ($task_id && $title && $start_date && $due_date && $project_id) {
+        // Récupérer le progrès actuel
+        $stmt = $pdo->prepare("SELECT progress FROM tasks WHERE id = ?");
+        $stmt->execute([$task_id]);
+        $current_progress = $stmt->fetchColumn();
+
+        // Empêcher la diminution du progrès
+        if ($progress < $current_progress) {
+            $progress = $current_progress;
+        }
+
+        // Mettre à jour le progrès en fonction du statut
+        $progress = updateTaskProgress($pdo, $task_id, $status);
+
         $stmt = $pdo->prepare("UPDATE tasks SET title = ?, description = ?, status = ?, progress = ?, 
                              start_date = ?, due_date = ?, project_id = ?, assigned_to = ? 
                              WHERE id = ?");
         if ($stmt->execute([$title, $description, $status, $progress, $start_date, $due_date, $project_id, $assigned_to, $task_id])) {
-            // Mettre à jour le progrès du projet après la modification d'une tâche
+            // Mettre à jour le progrès du projet
             updateProjectProgress($pdo, $project_id);
             $response['success'] = true;
+            $response['redirect'] = "../pages/tasks_manager.php?success=Tâche+mise+à+jour";
         } else {
             $response['error'] = "Failed to update task.";
         }
@@ -123,39 +178,68 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_task'])) {
 
 // Update task status
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status'])) {
-    $task_id = (int) $_POST['task_id'];
-    $status = $_POST['status'];
-    $progress = (float) ($_POST['progress'] ?? 0);
+    try {
+        // Log des données reçues
+        error_log("Données POST reçues : " . print_r($_POST, true));
 
-    if ($task_id && $status) {
-        // Récupérer le project_id de la tâche
-        $stmt = $pdo->prepare("SELECT project_id FROM tasks WHERE id = ?");
+        // Validation des données
+        if (!isset($_POST['task_id']) || !isset($_POST['status'])) {
+            throw new Exception("Données manquantes : ID de la tâche et statut requis.");
+        }
+
+        $task_id = (int) $_POST['task_id'];
+        $status = $_POST['status'];
+        $progress = (float) ($_POST['progress'] ?? 0);
+
+        // Log des valeurs après conversion
+        error_log("task_id: " . $task_id . ", status: " . $status . ", progress: " . $progress);
+
+        // Validation du statut
+        $valid_statuses = ['To-do', 'in progress', 'finished'];
+        if (!in_array($status, $valid_statuses)) {
+            throw new Exception("Statut invalide.");
+        }
+
+        // Validation du progrès
+        if ($progress < 0 || $progress > 100) {
+            throw new Exception("Le progrès doit être entre 0 et 100.");
+        }
+
+        // Récupérer le project_id et le progrès actuel de la tâche
+        $stmt = $pdo->prepare("SELECT project_id, progress FROM tasks WHERE id = ?");
         $stmt->execute([$task_id]);
         $task = $stmt->fetch(PDO::FETCH_ASSOC);
-        
-        if ($task) {
-            $stmt = $pdo->prepare("UPDATE tasks SET status = ?, progress = ? WHERE id = ?");
-            if ($stmt->execute([$status, $progress, $task_id])) {
-                // Mettre à jour le progrès du projet après la mise à jour du statut
-                updateProjectProgress($pdo, $task['project_id']);
-                $response['success'] = true;
-                $response['redirect'] = "../pages/tasks_manager.php?success=Status+mis+à+jour";
-            } else {
-                $response['error'] = "Failed to update task status.";
-            }
-        } else {
-            $response['error'] = "Task not found.";
-        }
-    } else {
-        $response['error'] = "Données manquantes.";
-    }
 
-    if ($response['error']) {
-        header("Location: ../pages/tasks_manager.php?error=" . urlencode($response['error']));
-    } else {
-        header("Location: " . $response['redirect']);
+        // Log du résultat de la requête
+        error_log("Résultat de la requête task : " . print_r($task, true));
+
+        if (!$task) {
+            throw new Exception("Tâche non trouvée (ID: " . $task_id . ").");
+        }
+
+        // Empêcher la diminution du progrès
+        if ($progress < $task['progress']) {
+            $progress = $task['progress'];
+        }
+
+        // Mettre à jour le statut et le progrès de la tâche
+        $stmt = $pdo->prepare("UPDATE tasks SET status = ?, progress = ? WHERE id = ?");
+        if (!$stmt->execute([$status, $progress, $task_id])) {
+            throw new Exception("Erreur lors de la mise à jour de la tâche.");
+        }
+
+        // Mettre à jour le progrès du projet
+        updateProjectProgress($pdo, $task['project_id']);
+
+        // Succès
+        header("Location: ../pages/tasks_manager.php?success=Statut+mis+à+jour+avec+succès");
+        exit;
+
+    } catch (Exception $e) {
+        error_log("Erreur lors de la mise à jour du statut : " . $e->getMessage());
+        header("Location: ../pages/tasks_manager.php?error=" . urlencode($e->getMessage()));
+        exit;
     }
-    exit;
 }
 
 // Gestion des commentaires

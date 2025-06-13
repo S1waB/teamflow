@@ -167,30 +167,6 @@ include '../layouts/header.php';
                         </div>
                     </div>
                 </div>
-                <!-- Danger Zone -->
-                <div class="card shadow-sm border-danger mt-2">
-                    <div class="card-header bg-danger text-white">
-                        <h5 class="mb-0"><i class="bi bi-exclamation-triangle me-2"></i>Zone dangereuse</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <h6 class="mb-0">Désactiver le compte</h6>
-                                <p class="text-muted mb-0">Votre compte sera désactivé mais vos données seront conservées</p>
-                            </div>
-                            <button class="btn btn-outline-danger" disabled>Désactiver</button>
-                        </div>
-
-                        <div class="d-flex justify-content-between align-items-center mt-3">
-                            <div>
-                                <h6 class="mb-0">Supprimer définitivement le compte</h6>
-                                <p class="text-muted mb-0">Cette action est irréversible et supprimera toutes vos données</p>
-                            </div>
-                            <button class="btn btn-danger" disabled>Supprimer</button>
-                        </div>
-                    </div>
-                </div>
-
             </div>
 
             <div class="col-lg-8">

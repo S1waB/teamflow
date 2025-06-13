@@ -305,9 +305,9 @@ include '../layouts/header.php';
                                         <button class="btn btn-sm btn-outline-info me-2 quick-update-btn"
                                                 data-bs-toggle="modal"
                                                 data-bs-target="#quickUpdateModal"
-                                                data-task-id="<?= $task['id'] ?>"
-                                                data-task-status="<?= $task['status'] ?>"
-                                                data-task-progress="<?= $task['progress'] ?>">
+                                                data-task-id="<?= htmlspecialchars($task['id']) ?>"
+                                                data-task-status="<?= htmlspecialchars($task['status']) ?>"
+                                                data-task-progress="<?= htmlspecialchars($task['progress']) ?>">
                                             <i class="bi bi-arrow-repeat"></i>
                                         </button>
                                         <?php endif; ?>
@@ -479,15 +479,21 @@ include '../layouts/header.php';
 <div class="modal fade" id="quickUpdateModal" tabindex="-1" aria-labelledby="quickUpdateModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
-            <form action="../controllers/tasks_controller.php" method="POST">
-                <input type="hidden" name="task_id" id="quickTaskId">
+            <form action="../controllers/tasks_controller.php" method="POST" id="quickUpdateForm">
+            <input type="hidden" name="task_id" id="quickTaskId">
+                <input type="hidden" name="update_status" value="1">
                 <div class="modal-header bg-info text-white">
                     <h5 class="modal-title" id="quickUpdateModalLabel">
-                        <i class="bi bi-arrow-repeat"></i> Mise à jour rapide
+                        <i class="bi bi-lightning-charge"></i> Mise à jour rapide
                     </h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fermer"></button>
                 </div>
                 <div class="modal-body">
+                    <!-- Debug info -->
+                    <div class="alert alert-info">
+                        <small>ID de la tâche: <span id="debugTaskId"></span></small>
+                    </div>
+                    
                     <div class="mb-3">
                         <label for="quickStatus" class="form-label">Statut <span class="text-danger">*</span></label>
                         <select class="form-select" id="quickStatus" name="status" required>
@@ -508,7 +514,7 @@ include '../layouts/header.php';
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-                    <button type="submit" name="update_status" class="btn btn-info">Mettre à jour</button>
+                    <button type="submit" class="btn btn-info">Mettre à jour</button>
                 </div>
             </form>
         </div>
@@ -669,55 +675,66 @@ include '../layouts/header.php';
         // Quick Update Modal Functionality
         const quickUpdateButtons = document.querySelectorAll('.quick-update-btn');
         quickUpdateButtons.forEach(button => {
-            button.addEventListener('click', () => {
-                const taskId = button.getAttribute('data-task-id');
-                const taskStatus = button.getAttribute('data-task-status');
-                const taskProgress = button.getAttribute('data-task-progress');
+            button.addEventListener('click', function() {
+                // Récupérer les données du bouton
+                const taskId = this.getAttribute('data-task-id');
+                const taskStatus = this.getAttribute('data-task-status');
+                const taskProgress = this.getAttribute('data-task-progress');
                 
-                document.getElementById('quickTaskId').value = taskId;
-                document.getElementById('quickStatus').value = taskStatus;
-                document.getElementById('quickProgress').value = taskProgress;
+                // Afficher les données de débogage
+                console.log('Button data:', {
+                    taskId: taskId,
+                    taskStatus: taskStatus,
+                    taskProgress: taskProgress
+                });
+                
+                // Mettre à jour les champs du modal
+                const quickTaskIdInput = document.getElementById('quickTaskId');
+                const quickStatusSelect = document.getElementById('quickStatus');
+                const quickProgressInput = document.getElementById('quickProgress');
+                const quickProgressValue = document.getElementById('quickProgressValue');
+                const debugTaskId = document.getElementById('debugTaskId');
+                
+                // Vérifier que tous les éléments existent
+                if (!quickTaskIdInput || !quickStatusSelect || !quickProgressInput || !quickProgressValue || !debugTaskId) {
+                    console.error('Un ou plusieurs éléments du modal sont manquants');
+                    return;
+                }
+                
+                // Définir les valeurs
+                quickTaskIdInput.value = taskId;
+                quickStatusSelect.value = taskStatus;
+                quickProgressInput.value = taskProgress;
                 quickProgressValue.textContent = `${taskProgress}%`;
-
-                // Gérer les restrictions de statut
-                const statusSelect = document.getElementById('quickStatus');
-                const options = statusSelect.options;
-
-                // Réinitialiser toutes les options
-                for (let i = 0; i < options.length; i++) {
-                    options[i].disabled = false;
-                }
-
-                // Désactiver les options en fonction du statut actuel
-                if (taskStatus === 'finished') {
-                    // Si terminé, on ne peut pas revenir en arrière
-                    for (let i = 0; i < options.length; i++) {
-                        if (options[i].value === 'To-do' || options[i].value === 'in progress') {
-                            options[i].disabled = true;
-                        }
-                    }
-                } else if (taskStatus === 'in progress') {
-                    // Si en cours, on ne peut pas revenir à "à faire"
-                    for (let i = 0; i < options.length; i++) {
-                        if (options[i].value === 'To-do') {
-                            options[i].disabled = true;
-                        }
-                    }
-                }
-
-                // Empêcher la diminution du progrès
-                const progressInput = document.getElementById('quickProgress');
-                progressInput.min = taskProgress; // Définir la valeur minimale comme le progrès actuel
+                debugTaskId.textContent = taskId;
                 
-                // Ajouter un événement pour empêcher la diminution manuelle
-                progressInput.addEventListener('input', function() {
-                    if (parseInt(this.value) < parseInt(taskProgress)) {
-                        this.value = taskProgress;
-                        quickProgressValue.textContent = `${taskProgress}%`;
-                    }
+                // Vérifier les valeurs après définition
+                console.log('Modal values after setting:', {
+                    taskId: quickTaskIdInput.value,
+                    status: quickStatusSelect.value,
+                    progress: quickProgressInput.value
                 });
             });
         });
+        
+        // Validation du formulaire
+        const quickUpdateForm = document.getElementById('quickUpdateForm');
+        if (quickUpdateForm) {
+            quickUpdateForm.addEventListener('submit', function(e) {
+                const taskId = document.getElementById('quickTaskId').value;
+                const status = document.getElementById('quickStatus').value;
+                
+                console.log('Form submission values:', {
+                    taskId: taskId,
+                    status: status
+                });
+                
+                if (!taskId || !status) {
+                    e.preventDefault();
+                    alert('Veuillez remplir tous les champs requis');
+                }
+            });
+        }
         
         // Set today's date as default for start date in add modal
         const today = new Date().toISOString().split('T')[0];
