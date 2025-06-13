@@ -72,17 +72,7 @@ try {
 // 3. Recent tasks - Different based on role
 $recentTasks = [];
 try {
-    if ($currentUserRole === 'admin') {
-        $stmt = $pdo->prepare("
-            SELECT t.title, t.status, t.start_date, u.name AS assigned_to
-            FROM tasks t
-            JOIN users u ON t.assigned_to = u.id
-            JOIN roles r ON u.role_id = r.id
-            WHERE r.name = 'membre'
-            ORDER BY t.start_date DESC
-            LIMIT 5
-        ");
-    } elseif ($currentUserRole === 'chef_projet') {
+    if ($currentUserRole === 'chef_projet') {
         $stmt = $pdo->prepare("
             SELECT t.title, t.status, t.start_date, u.name AS assigned_to
             FROM tasks t
@@ -95,9 +85,8 @@ try {
         $stmt->bindParam(':userId', $currentUserId, PDO::PARAM_INT);
     } else { // Member
         $stmt = $pdo->prepare("
-            SELECT t.title, t.status, t.start_date, u.name AS assigned_to
+            SELECT t.title, t.status, t.start_date
             FROM tasks t
-            JOIN users u ON t.assigned_to = u.id
             WHERE t.assigned_to = :userId
             ORDER BY t.start_date DESC
             LIMIT 5
@@ -548,20 +537,53 @@ include '../layouts/header.php';
                     <!-- Tâches Récentes -->
                     <?php if (!empty($recentTasks)): ?>
                     <div class="card mt-4">
-                        <div class="card-header"><h5 class="mb-0">Tâches Récentes</h5></div>
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <?php if ($currentUserRole === 'chef_projet'): ?>
+                                    Tâches de vos projets
+                                <?php else: ?>
+                                    Mes tâches récentes
+                                <?php endif; ?>
+                            </h5>
+                        </div>
                         <div class="card-body">
-                            <ul class="list-group">
-                                <?php foreach ($recentTasks as $task): ?>
-                                    <li class="list-group-item">
-                                        <h6><?= htmlspecialchars($task['title']) ?> <small class="badge bg-secondary ms-2"><?= $task['status'] ?></small></h6>
-                                        <small class="text-muted">
-                                            <i class="fas fa-user me-1"></i> <?= htmlspecialchars($task['assigned_to']) ?>
-                                            &bull;
-                                            <i class="fas fa-calendar me-1"></i> <?= $task['start_date'] ?>
-                                        </small>
-                                    </li>
-                                <?php endforeach; ?>
-                            </ul>
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Tâche</th>
+                                            <th>Statut</th>
+                                            <?php if ($currentUserRole === 'chef_projet'): ?>
+                                                <th>Assigné à</th>
+                                            <?php endif; ?>
+                                            <th>Date</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php foreach ($recentTasks as $task): ?>
+                                            <tr>
+                                                <td><?= htmlspecialchars($task['title']) ?></td>
+                                                <td>
+                                                    <span class="badge <?php 
+                                                        echo match($task['status']) {
+                                                            'To-do' => 'bg-secondary',
+                                                            'in progress' => 'bg-warning',
+                                                            'finished' => 'bg-success',
+                                                            default => 'bg-secondary'
+                                                        };
+                                                    ?>">
+                                                        <?= $task['status'] ?>
+                                                    </span>
+                                                </td>
+                                                <?php if ($currentUserRole === 'chef_projet'): ?>
+                                                    <td><?= htmlspecialchars($task['assigned_to']) ?></td>
+                                                <?php endif; ?>
+                                                <td><?= $task['start_date'] ?></td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                     <?php endif; ?>

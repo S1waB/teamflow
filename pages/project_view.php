@@ -2,74 +2,92 @@
 // project_view.php
 require '../config/db_connection.php';
 
-if (!isset($_GET['id']) ){
+// Vérification de la session
+session_start();
+if (!isset($_SESSION['user_id'])) {
+    header("Location: login.php");
+    exit;
+}
+
+// Récupération du rôle de l'utilisateur
+$stmt = $pdo->prepare("SELECT r.name as role_name FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = ?");
+$stmt->execute([$_SESSION['user_id']]);
+$user_role = $stmt->fetchColumn();
+
+// Check if project ID is set and valid
+if (!isset($_GET['id']) || !is_numeric($_GET['id']) || $_GET['id'] <= 0) {
     header("Location: projects_manager.php");
     exit;
 }
 
-$project_id = (int) $_GET['id'];
+$project_id = (int)$_GET['id'];
 
-// Fetch project details
-$stmt = $pdo->prepare("
-    SELECT p.*, u.name AS manager_name 
-    FROM projects p
-    JOIN users u ON p.manager_id = u.id
-    WHERE p.id = ?
-");
-$stmt->execute([$project_id]);
-$project = $stmt->fetch(PDO::FETCH_ASSOC);
+try {
+    // Fetch project details
+    $stmt = $pdo->prepare("
+        SELECT p.*, u.name AS manager_name 
+        FROM projects p
+        JOIN users u ON p.manager_id = u.id
+        WHERE p.id = ?
+    ");
+    $stmt->execute([$project_id]);
+    $project = $stmt->fetch(PDO::FETCH_ASSOC);
 
-if (!$project) {
-    header("Location: projects_manager.php");
-    exit;
+    if (!$project) {
+        header("Location: projects_manager.php");
+        exit;
+    }
+
+    // Calculate days remaining
+    $today = new DateTime();
+    $end_date = new DateTime($project['end_date']);
+    $interval = $today->diff($end_date);
+    $days_remaining = $interval->invert ? 0 : $interval->days;
+
+    // Progress bar styling
+    $progress = (float)$project['progress'];
+    $progressClass = $progress >= 80 ? 'bg-success' : ($progress >= 50 ? 'bg-info' : ($progress >= 30 ? 'bg-warning' : 'bg-danger'));
+
+    // Fetch project members
+    $stmt = $pdo->prepare("
+        SELECT u.id, u.name, u.email, u.profile_pic, s.name AS specialty
+        FROM project_members pm
+        JOIN users u ON pm.member_id = u.id
+        LEFT JOIN specialties s ON u.specialty_id = s.id
+        WHERE pm.project_id = ?
+    ");
+    $stmt->execute([$project_id]);
+    $members = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Fetch available members to add
+    $stmt = $pdo->prepare("
+        SELECT u.id, u.name, u.email
+        FROM users u
+        LEFT JOIN project_members pm ON u.id = pm.member_id AND pm.project_id = ?
+        WHERE pm.member_id IS NULL AND u.role_id = (SELECT id FROM roles WHERE name = 'membre')
+    ");
+    $stmt->execute([$project_id]);
+    $availableMembers = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Fetch project tasks
+    $stmt = $pdo->prepare("
+        SELECT t.*, u.name AS assigned_to_name 
+        FROM tasks t
+        LEFT JOIN users u ON t.assigned_to = u.id
+        WHERE t.project_id = ?
+        ORDER BY t.status, t.due_date ASC
+    ");
+    $stmt->execute([$project_id]);
+    $tasks = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+} catch (PDOException $e) {
+    $error = "Erreur de base de données : " . htmlspecialchars($e->getMessage());
 }
-
-// Calculate days remaining
-$today = new DateTime();
-$end_date = new DateTime($project['end_date']);
-$interval = $today->diff($end_date);
-$days_remaining = $interval->invert ? 0 : $interval->days;
-
-// Progress bar styling
-$progress = (float)$project['progress'];
-$progressClass = $progress >= 80 ? 'bg-success' : ($progress >= 50 ? 'bg-info' : ($progress >= 30 ? 'bg-warning' : 'bg-danger'));
-
-// Fetch project members
-$stmt = $pdo->prepare("
-    SELECT u.id, u.name, u.email, u.profile_pic, s.name AS specialty
-    FROM project_members pm
-    JOIN users u ON pm.member_id = u.id
-    LEFT JOIN specialties s ON u.specialty_id = s.id
-    WHERE pm.project_id = ?
-");
-$stmt->execute([$project_id]);
-$members = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-// Fetch available members to add
-$stmt = $pdo->prepare("
-    SELECT u.id, u.name, u.email
-    FROM users u
-    LEFT JOIN project_members pm ON u.id = pm.member_id AND pm.project_id = ?
-    WHERE pm.member_id IS NULL AND u.role_id = (SELECT id FROM roles WHERE name = 'membre')
-");
-$stmt->execute([$project_id]);
-$availableMembers = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-// Fetch project tasks
-$stmt = $pdo->prepare("
-    SELECT t.*, u.name AS assigned_to_name 
-    FROM tasks t
-    LEFT JOIN users u ON t.assigned_to = u.id
-    WHERE t.project_id = ?
-    ORDER BY t.status, t.due_date ASC
-");
-$stmt->execute([$project_id]);
-$tasks = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Get error if redirected with error message
-$error = isset($_GET['error']) ? $_GET['error'] : '';
+$error = isset($_GET['error']) ? htmlspecialchars($_GET['error']) : '';
 
-$pageTitle = "Détails du projet: " . $project['name'];
+$pageTitle = "Détails du projet : " . htmlspecialchars($project['name']);
 include '../layouts/header.php';
 ?>
 
@@ -91,7 +109,7 @@ include '../layouts/header.php';
             </div>
 
             <?php if (!empty($error)): ?>
-                <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
+                <div class="alert alert-danger"><?= $error ?></div>
             <?php endif; ?>
 
             <!-- Project Details -->
@@ -107,26 +125,26 @@ include '../layouts/header.php';
                                     <h5>Dates</h5>
                                     <p>
                                         <i class="bi bi-calendar-event me-2"></i>
-                                        <strong>Début:</strong> <?= date('d/m/Y', strtotime($project['start_date'])) ?>
+                                        <strong>Début :</strong> <?= date('d/m/Y', strtotime($project['start_date'])) ?>
                                     </p>
                                     <p>
                                         <i class="bi bi-calendar-check me-2"></i>
-                                        <strong>Fin:</strong> <?= date('d/m/Y', strtotime($project['end_date'])) ?>
+                                        <strong>Fin :</strong> <?= date('d/m/Y', strtotime($project['end_date'])) ?>
                                     </p>
                                     <p>
                                         <i class="bi bi-clock me-2"></i>
-                                        <strong>Jours restants:</strong> <?= $days_remaining ?>
+                                        <strong>Jours restants :</strong> <?= $days_remaining ?>
                                     </p>
                                 </div>
                                 <div class="col-md-6">
                                     <h5>Responsables</h5>
                                     <p>
                                         <i class="bi bi-person-badge me-2"></i>
-                                        <strong>Manager:</strong> <?= htmlspecialchars($project['manager_name']) ?>
+                                        <strong>Manager :</strong> <?= htmlspecialchars($project['manager_name']) ?>
                                     </p>
                                     <p>
                                         <i class="bi bi-people me-2"></i>
-                                        <strong>Membres:</strong> <?= count($members) ?>
+                                        <strong>Membres :</strong> <?= count($members) ?>
                                     </p>
                                 </div>
                             </div>
@@ -143,15 +161,16 @@ include '../layouts/header.php';
                                     <?= $progress ?>%
                                 </div>
                             </div>
-                            
-                            <div class="d-grid gap-2">
-                                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addTaskModal">
-                                    <i class="bi bi-plus-circle me-1"></i> Ajouter une tâche
-                                </button>
-                                <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addMemberModal">
-                                    <i class="bi bi-person-plus me-1"></i> Ajouter un membre
-                                </button>
-                            </div>
+                            <?php if ($user_role === 'admin' || $user_role === 'chef_projet'): ?>
+                                <div class="d-grid gap-2">
+                                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addTaskModal">
+                                        <i class="bi bi-plus-circle me-1"></i> Ajouter une tâche
+                                    </button>
+                                    <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addMemberModal">
+                                        <i class="bi bi-person-plus me-1"></i> Ajouter un membre
+                                    </button>
+                                </div>
+                            <?php endif; ?>
                         </div>
                     </div>
                 </div>
@@ -182,13 +201,16 @@ include '../layouts/header.php';
                                                 <h6 class="mb-0"><?= htmlspecialchars($member['name']) ?></h6>
                                                 <small class="text-muted"><?= htmlspecialchars($member['specialty'] ?? 'Aucune spécialité') ?></small>
                                             </div>
-                                            <div class="ms-auto">
-                                                <a href="../controllers/projects_controller.php?remove_member&project_id=<?= $project_id ?>&member_id=<?= $member['id'] ?>" 
-                                                   class="btn btn-sm btn-outline-danger"
-                                                   onclick="return confirm('Retirer ce membre du projet ?');">
-                                                    <i class="bi bi-trash"></i>
-                                                </a>
-                                            </div>
+                                            <?php if ($user_role === 'admin' || $user_role === 'chef_projet'): ?>
+                                                <div class="ms-auto">
+                                                    <a href="../controllers/projects_controller.php?action=remove_member&project_id=<?= $project_id ?>&member_id=<?= $member['id'] ?>" 
+                                                       class="btn btn-sm btn-outline-danger" 
+                                                       title="Retirer du projet"
+                                                       onclick="return confirm('Voulez-vous retirer ce membre du projet ?');">
+                                                        <i class="bi bi-trash"></i>
+                                                    </a>
+                                                </div>
+                                            <?php endif; ?>
                                         </div>
                                     </div>
                                 </div>
@@ -260,11 +282,44 @@ include '../layouts/header.php';
                                                 </div>
                                             </td>
                                             <td class="text-center">
-                                                <button class="btn btn-sm btn-outline-primary">
-                                                    <i class="bi bi-pencil"></i>
+                                                <?php if ($user_role === 'admin' || $user_role === 'chef_projet'): ?>
+                                                    <button class="btn btn-sm btn-outline-primary" 
+                                                            data-bs-toggle="modal" 
+                                                            data-bs-target="#editTaskModal"
+                                                            data-task-id="<?= $task['id'] ?>"
+                                                            data-task-title="<?= htmlspecialchars($task['title']) ?>"
+                                                            data-task-description="<?= htmlspecialchars($task['description']) ?>"
+                                                            data-task-start-date="<?= $task['start_date'] ?>"
+                                                            data-task-due-date="<?= $task['due_date'] ?>"
+                                                            data-task-assigned-to="<?= $task['assigned_to'] ?>"
+                                                            data-task-progress="<?= $taskProgress ?>"
+                                                            title="Modifier la tâche">
+                                                        <i class="bi bi-pencil"></i>
+                                                    </button>
+                                                    <a href="../controllers/tasks_controller.php?action=delete_task&task_id=<?= $task['id'] ?>&project_id=<?= $project_id ?>" 
+                                                       class="btn btn-sm btn-outline-danger" 
+                                                       title="Supprimer la tâche"
+                                                       onclick="return confirm('Voulez-vous supprimer cette tâche ?');">
+                                                        <i class="bi bi-trash"></i>
+                                                    </a>
+                                                <?php endif; ?>
+
+                                                <!-- Bouton Voir l'historique -->
+                                                <button class="btn btn-sm btn-outline-secondary me-2 view-history-btn"
+                                                        data-bs-toggle="modal"
+                                                        data-bs-target="#viewHistoryModal"
+                                                        data-task-id="<?= $task['id'] ?>"
+                                                        title="Voir l'historique">
+                                                    <i class="bi bi-clock-history"></i>
                                                 </button>
-                                                <button class="btn btn-sm btn-outline-danger">
-                                                    <i class="bi bi-trash"></i>
+
+                                                <!-- Bouton Commentaire -->
+                                                <button class="btn btn-sm btn-outline-success comment-btn"
+                                                        data-bs-toggle="modal"
+                                                        data-bs-target="#addCommentModal"
+                                                        data-task-id="<?= $task['id'] ?>"
+                                                        title="Ajouter un commentaire">
+                                                    <i class="bi bi-chat-dots"></i>
                                                 </button>
                                             </td>
                                         </tr>
@@ -289,6 +344,7 @@ include '../layouts/header.php';
         <div class="modal-content">
             <form action="../controllers/projects_controller.php" method="POST">
                 <input type="hidden" name="project_id" value="<?= $project_id ?>">
+                <input type="hidden" name="add_member" value="1">
                 <div class="modal-header bg-success text-white">
                     <h5 class="modal-title" id="addMemberModalLabel">
                         <i class="bi bi-person-plus"></i> Ajouter un membre au projet
@@ -299,16 +355,16 @@ include '../layouts/header.php';
                     <div class="mb-3">
                         <label for="memberSelect" class="form-label">Sélectionner un membre <span class="text-danger">*</span></label>
                         <select class="form-select" id="memberSelect" name="member_id" required>
-                            <option value="" selected>-- Choisir un membre --</option>
+                            <option value="">-- Choisir un membre --</option>
                             <?php foreach ($availableMembers as $member): ?>
-                                <option value="<?= $member['id'] ?>"><?= htmlspecialchars($member['name']) ?></option>
+                                <option value="<?= $member['id'] ?>"><?= htmlspecialchars($member['name']) ?> (<?= htmlspecialchars($member['email']) ?>)</option>
                             <?php endforeach; ?>
                         </select>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-                    <button type="submit" name="add_member" class="btn btn-success">Ajouter</button>
+                    <button type="submit" class="btn btn-success">Ajouter</button>
                 </div>
             </form>
         </div>
@@ -339,12 +395,23 @@ include '../layouts/header.php';
                     <div class="row mb-3">
                         <div class="col-md-6">
                             <label for="taskStartDate" class="form-label">Date de début <span class="text-danger">*</span></label>
-                            <input type="date" class="form-control" id="taskStartDate" name="start_date" required>
+                            <input type="date" class="form-control" id="taskStartDate" name="start_date" 
+                                   min="<?= htmlspecialchars($project['start_date']) ?>" 
+                                   max="<?= htmlspecialchars($project['end_date']) ?>" 
+                                   required>
                         </div>
                         <div class="col-md-6">
                             <label for="taskDueDate" class="form-label">Date d'échéance <span class="text-danger">*</span></label>
-                            <input type="date" class="form-control" id="taskDueDate" name="due_date" required>
+                            <input type="date" class="form-control" id="taskDueDate" name="due_date" 
+                                   min="<?= htmlspecialchars($project['start_date']) ?>" 
+                                   max="<?= htmlspecialchars($project['end_date']) ?>" 
+                                   required>
                         </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="taskProgress" class="form-label">Progrès initial (%)</label>
+                        <input type="range" class="form-range" id="taskProgress" name="progress" min="0" max="100" value="0">
+                        <span id="taskProgressValue">0%</span>
                     </div>
                     <div class="mb-3">
                         <label for="assignTo" class="form-label">Assigner à</label>
@@ -354,23 +421,6 @@ include '../layouts/header.php';
                                 <option value="<?= $member['id'] ?>"><?= htmlspecialchars($member['name']) ?></option>
                             <?php endforeach; ?>
                         </select>
-                    </div>
-                    <div class="mb-3">
-                        <label for="taskStatus" class="form-label">Statut</label>
-                        <select class="form-select" id="taskStatus" name="status">
-                            <option value="To-do">À faire</option>
-                            <option value="in progress">En cours</option>
-                            <option value="finished">Terminé</option>
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label for="taskProgress" class="form-label">Progrès (%)</label>
-                        <input type="range" class="form-range" id="taskProgress" name="progress" min="0" max="100" value="0">
-                        <div class="d-flex justify-content-between">
-                            <small>0%</small>
-                            <small id="taskProgressValue">0%</small>
-                            <small>100%</small>
-                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -382,16 +432,184 @@ include '../layouts/header.php';
     </div>
 </div>
 
+<!-- Edit Task Modal -->
+<div class="modal fade" id="editTaskModal" tabindex="-1" aria-labelledby="editTaskModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form action="../controllers/tasks_controller.php" method="POST">
+                <input type="hidden" name="project_id" value="<?= $project_id ?>">
+                <input type="hidden" name="task_id" id="editTaskId">
+                <div class="modal-header bg-warning text-dark">
+                    <h5 class="modal-title" id="editTaskModalLabel">
+                        <i class="bi bi-pencil"></i> Modifier la tâche
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="editTaskTitle" class="form-label">Titre <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="editTaskTitle" name="title" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="editTaskDescription" class="form-label">Description</label>
+                        <textarea class="form-control" id="editTaskDescription" name="description" rows="3"></textarea>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="editTaskStartDate" class="form-label">Date de début <span class="text-danger">*</span></label>
+                            <input type="date" class="form-control" id="editTaskStartDate" name="start_date" 
+                                   min="<?= htmlspecialchars($project['start_date']) ?>" 
+                                   max="<?= htmlspecialchars($project['end_date']) ?>" 
+                                   required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="editTaskDueDate" class="form-label">Date d'échéance <span class="text-danger">*</span></label>
+                            <input type="date" class="form-control" id="editTaskDueDate" name="due_date" 
+                                   min="<?= htmlspecialchars($project['start_date']) ?>" 
+                                   max="<?= htmlspecialchars($project['end_date']) ?>" 
+                                   required>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="editTaskProgress" class="form-label">Progrès (%)</label>
+                        <input type="range" class="form-range" id="editTaskProgress" name="progress" min="0" max="100" value="0">
+                        <span id="editTaskProgressValue">0%</span>
+                    </div>
+                    <div class="mb-3">
+                        <label for="editAssignTo" class="form-label">Assigner à</label>
+                        <select class="form-select" id="editAssignTo" name="assigned_to">
+                            <option value="">-- Non assigné --</option>
+                            <?php foreach ($members as $member): ?>
+                                <option value="<?= $member['id'] ?>"><?= htmlspecialchars($member['name']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" name="edit_task" class="btn btn-warning">Modifier</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal pour voir l'historique des commentaires -->
+<div class="modal fade" id="viewHistoryModal" tabindex="-1" aria-labelledby="viewHistoryModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-secondary text-white">
+                <h5 class="modal-title" id="viewHistoryModalLabel">
+                    <i class="bi bi-clock-history"></i> Historique des commentaires
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fermer"></button>
+            </div>
+            <div class="modal-body">
+                <div id="commentsHistory" class="comments-list">
+                    <!-- Les commentaires seront chargés ici dynamiquement -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal pour ajouter un commentaire -->
+<div class="modal fade" id="addCommentModal" tabindex="-1" aria-labelledby="addCommentModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form action="../controllers/tasks_controller.php" method="POST">
+                <input type="hidden" name="task_id" id="commentTaskId">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title" id="addCommentModalLabel">
+                        <i class="bi bi-chat-dots"></i> Ajouter un commentaire
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fermer"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="commentText" class="form-label">Commentaire</label>
+                        <textarea class="form-control" id="commentText" name="comment" rows="4" required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" name="add_comment" class="btn btn-success">Publier</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <script>
-    document.addEventListener('DOMContentLoaded', () => {
-        // Task progress slider
-        const taskProgress = document.getElementById('taskProgress');
-        const taskProgressValue = document.getElementById('taskProgressValue');
-        
-        taskProgress.addEventListener('input', () => {
-            taskProgressValue.textContent = `${taskProgress.value}%`;
-        });
+// Initialize tooltips
+const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
+
+// Task progress slider for Add Task Modal
+const taskProgress = document.getElementById('taskProgress');
+const taskProgressValue = document.getElementById('taskProgressValue');
+taskProgress.addEventListener('input', () => {
+    taskProgressValue.textContent = `${taskProgress.value}%`;
+});
+
+// Task progress slider for Edit Task Modal
+const editTaskProgress = document.getElementById('editTaskProgress');
+const editTaskProgressValue = document.getElementById('editTaskProgressValue');
+editTaskProgress.addEventListener('input', () => {
+    editTaskProgressValue.textContent = `${editTaskProgress.value}%`;
+});
+
+// Populate Edit Task Modal with task data
+document.querySelectorAll('[data-bs-target="#editTaskModal"]').forEach(button => {
+    button.addEventListener('click', () => {
+        document.getElementById('editTaskId').value = button.dataset.taskId;
+        document.getElementById('editTaskTitle').value = button.dataset.taskTitle;
+        document.getElementById('editTaskDescription').value = button.dataset.taskDescription;
+        document.getElementById('editTaskStartDate').value = button.dataset.taskStartDate;
+        document.getElementById('editTaskDueDate').value = button.dataset.taskDueDate;
+        document.getElementById('editTaskProgress').value = button.dataset.taskProgress;
+        document.getElementById('editTaskProgressValue').textContent = `${button.dataset.taskProgress}%`;
+        document.getElementById('editAssignTo').value = button.dataset.taskAssignedTo || '';
     });
+});
+
+// Gestionnaire pour le bouton de commentaire
+document.querySelectorAll('.comment-btn').forEach(button => {
+    button.addEventListener('click', () => {
+        const taskId = button.getAttribute('data-task-id');
+        document.getElementById('commentTaskId').value = taskId;
+    });
+});
+
+// Gestionnaire pour le bouton d'historique
+document.querySelectorAll('.view-history-btn').forEach(button => {
+    button.addEventListener('click', () => {
+        const taskId = button.getAttribute('data-task-id');
+        const commentsContainer = document.getElementById('commentsHistory');
+        
+        // Charger les commentaires via AJAX
+        fetch(`../controllers/tasks_controller.php?get_comments=${taskId}`)
+            .then(response => response.json())
+            .then(comments => {
+                commentsContainer.innerHTML = comments.map(comment => `
+                    <div class="comment-item mb-3 p-3 border rounded">
+                        <div class="d-flex justify-content-between">
+                            <strong>${comment.user_name}</strong>
+                            <small class="text-muted">${comment.created_at}</small>
+                        </div>
+                        <p class="mb-0 mt-2">${comment.comment}</p>
+                    </div>
+                `).join('');
+            })
+            .catch(error => {
+                console.error('Erreur lors du chargement des commentaires:', error);
+                commentsContainer.innerHTML = '<div class="alert alert-danger">Erreur lors du chargement des commentaires</div>';
+            });
+    });
+});
 </script>
 
 <?php include '../layouts/footer.php'; ?>

@@ -67,10 +67,10 @@ foreach ($menus[$role] as $key => $menuItem) {
     <div class="profile-section p-4 text-center">
         <div class="profile-pic-wrapper mb-3">
             <div class="profile-pic-inner">
-                <img src="../uploads/profile_pics/.<?= htmlspecialchars($profilePicPath) ?>"
+                <img src="../uploads/profile_pics/<?= htmlspecialchars($profilePic) ?>"
                     alt="Profile Picture"
                     class="profile-pic"
-                    onerror="this.onerror=null;this.src='/uploads/profile_pics/default-avatar.png';" />
+                    onerror="this.onerror=null;this.src='../uploads/profile_pics/default-avatar.png';" />
             </div>
             <div class="status-indicator online"></div>
         </div>

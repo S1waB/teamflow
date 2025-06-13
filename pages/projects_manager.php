@@ -2,6 +2,21 @@
 // projects_manager.php
 require '../config/db_connection.php';
 
+// Initialize session if not already started
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+// Check if user is logged in
+if (!isset($_SESSION['user_id'])) {
+    header('Location: ../login.php');
+    exit();
+}
+
+// Get user role and ID from session
+$user_role = $_SESSION['role'];
+$current_user_id = $_SESSION['user_id'];
+
 // Fetch all projects
 $search = isset($_GET['search']) ? trim($_GET['search']) : '';
 $filter_manager = isset($_GET['filter_manager']) ? (int) $_GET['filter_manager'] : 0;
@@ -49,9 +64,11 @@ include '../layouts/header.php';
             <div class="card shadow-sm mb-4 border-0">
                 <div class="card-body d-flex justify-content-between align-items-center">
                     <h3 class="card-title mb-0"><i class="bi bi-kanban me-2"></i>Gestion des projets</h3>
+                    <?php if ($user_role === 'admin'): ?>
                     <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addProjectModal">
                         <i class="bi bi-plus-circle me-1"></i> Ajouter un projet
                     </button>
+                    <?php endif; ?>
                 </div>
             </div>
 
@@ -107,6 +124,13 @@ include '../layouts/header.php';
                         </thead>
                         <tbody>
                             <?php foreach ($projects as $project):
+                                // Restreindre les projets selon le rôle
+                                if (
+                                    ($user_role === 'membre' && $project['manager_id'] !== $current_user_id) ||
+                                    ($user_role === 'chef_projet' && $project['manager_id'] !== $current_user_id)
+                                ) {
+                                    continue; // Passer au projet suivant si ce n'est pas le sien
+                                }
                                 $progress = (float)$project['progress'];
                                 $progressClass = $progress >= 80 ? 'bg-success' : ($progress >= 50 ? 'bg-info' : ($progress >= 30 ? 'bg-warning' : 'bg-danger'));
                             ?>

@@ -1,6 +1,11 @@
 <?php
 require '../config/db_connection.php';
 
+// Récupérer l'utilisateur connecté et son rôle
+session_start();
+$user_id = $_SESSION['user_id'] ?? 0;
+$user_role = $_SESSION['role'] ?? '';
+
 // Fetch all tasks
 $search = isset($_GET['search']) ? trim($_GET['search']) : '';
 $filter_project = isset($_GET['filter_project']) ? (int) $_GET['filter_project'] : 0;
@@ -8,29 +13,35 @@ $filter_status = isset($_GET['filter_status']) ? $_GET['filter_status'] : '';
 
 $sql = "
     SELECT t.id, t.title, t.description, t.status, t.progress, t.start_date, t.due_date,
-           p.name AS project_name, u.name AS assigned_to_name
+           p.name AS project_name, u.name AS assigned_to_name, t.assigned_to
     FROM tasks t
     JOIN projects p ON t.project_id = p.id
     LEFT JOIN users u ON t.assigned_to = u.id
     WHERE 1
 ";
 
+// Initialize params array
 $params = [];
 
+// Si l'utilisateur est un membre, ne montrer que ses tâches assignées
+if ($user_role === 'membre') {
+    $sql .= " AND t.assigned_to = :user_id";
+    $params[':user_id'] = $user_id;
+}
+
 if ($search !== '') {
-    $sql .= " AND (t.title LIKE ? OR t.description LIKE ?)";
-    $params[] = "%$search%";
-    $params[] = "%$search%";
+    $sql .= " AND (t.title LIKE :search OR t.description LIKE :search)";
+    $params[':search'] = "%$search%";
 }
 
 if ($filter_project > 0) {
-    $sql .= " AND t.project_id = ?";
-    $params[] = $filter_project;
+    $sql .= " AND t.project_id = :project_id";
+    $params[':project_id'] = $filter_project;
 }
 
 if ($filter_status !== '') {
-    $sql .= " AND t.status = ?";
-    $params[] = $filter_status;
+    $sql .= " AND t.status = :status";
+    $params[':status'] = $filter_status;
 }
 
 $sql .= " ORDER BY t.due_date ASC";
@@ -38,11 +49,31 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $tasks = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Fetch projects
-$projects = $pdo->query("SELECT id, name FROM projects ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
+// Fetch projects - Pour les membres, ne montrer que les projets auxquels ils sont assignés
+if ($user_role === 'membre') {
+    $sql_projects = "
+        SELECT DISTINCT p.id, p.name 
+        FROM projects p
+        JOIN tasks t ON p.id = t.project_id
+        WHERE t.assigned_to = :user_id
+        ORDER BY p.name
+    ";
+    $stmt_projects = $pdo->prepare($sql_projects);
+    $stmt_projects->execute([':user_id' => $user_id]);
+    $projects = $stmt_projects->fetchAll(PDO::FETCH_ASSOC);
+} else {
+    $projects = $pdo->query("SELECT id, name FROM projects ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
+}
 
-// Fetch users
-$users = $pdo->query("SELECT id, name FROM users ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
+// Fetch users - Pour les membres, ne montrer que leur propre profil
+if ($user_role === 'membre') {
+    $sql_users = "SELECT id, name FROM users WHERE id = :user_id";
+    $stmt_users = $pdo->prepare($sql_users);
+    $stmt_users->execute([':user_id' => $user_id]);
+    $users = $stmt_users->fetchAll(PDO::FETCH_ASSOC);
+} else {
+    $users = $pdo->query("SELECT id, name FROM users ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
+}
 
 // Get error if redirected with error message
 $error = isset($_GET['error']) ? $_GET['error'] : '';
@@ -62,9 +93,11 @@ include '../layouts/header.php';
             <div class="card shadow-sm mb-4 border-0">
                 <div class="card-body d-flex justify-content-between align-items-center">
                     <h3 class="card-title mb-0"><i class="bi bi-list-task me-2"></i>Gestion des tâches</h3>
+                    <?php if ($user_role === 'admin' || $user_role === 'chef_projet'): ?>
                     <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addTaskModal">
                         <i class="bi bi-plus-circle me-1"></i> Ajouter une tâche
                     </button>
+                    <?php endif; ?>
                 </div>
             </div>
 
@@ -182,12 +215,22 @@ include '../layouts/header.php';
                                         </div>
                                     </td>
                                     <td class="text-center">
+                                        <?php if ($user_role === 'admin' || $user_role === 'chef_projet'): ?>
                                         <button class="btn btn-sm btn-outline-primary me-2 edit-task-btn"
                                                 data-bs-toggle="modal"
                                                 data-bs-target="#editTaskModal"
                                                 data-task='<?= json_encode($task) ?>'>
                                             <i class="bi bi-pencil-square"></i>
                                         </button>
+                                            <a href="../controllers/tasks_controller.php?delete_task_id=<?= $task['id'] ?>"
+                                               onclick="return confirm('Supprimer cette tâche ?');"
+                                               class="btn btn-sm btn-outline-danger" title="Supprimer">
+                                                <i class="bi bi-trash-fill"></i>
+                                            </a>
+                                        <?php endif; ?>
+                                        
+                                        <?php if ($user_role === 'admin' || $user_role === 'chef_projet' || 
+                                                 ($user_role === 'membre' && $task['assigned_to'] == $user_id)): ?>
                                         <button class="btn btn-sm btn-outline-info me-2 quick-update-btn"
                                                 data-bs-toggle="modal"
                                                 data-bs-target="#quickUpdateModal"
@@ -196,11 +239,25 @@ include '../layouts/header.php';
                                                 data-task-progress="<?= $task['progress'] ?>">
                                             <i class="bi bi-arrow-repeat"></i>
                                         </button>
-                                        <a href="../controllers/tasks_controller.php?delete_task_id=<?= $task['id'] ?>"
-                                           onclick="return confirm('Supprimer cette tâche ?');"
-                                           class="btn btn-sm btn-outline-danger" title="Supprimer">
-                                            <i class="bi bi-trash-fill"></i>
-                                        </a>
+                                        <?php endif; ?>
+
+                                        <!-- Bouton Voir l'historique -->
+                                        <button class="btn btn-sm btn-outline-secondary me-2 view-history-btn"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#viewHistoryModal"
+                                                data-task-id="<?= $task['id'] ?>"
+                                                title="Voir l'historique">
+                                            <i class="bi bi-clock-history"></i>
+                                        </button>
+
+                                        <!-- Bouton Commentaire (visible pour tous les utilisateurs) -->
+                                        <button class="btn btn-sm btn-outline-success comment-btn"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#addCommentModal"
+                                                data-task-id="<?= $task['id'] ?>"
+                                                title="Ajouter un commentaire">
+                                            <i class="bi bi-chat-dots"></i>
+                                        </button>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
@@ -402,6 +459,55 @@ include '../layouts/header.php';
     </div>
 </div>
 
+<!-- Modal pour voir l'historique des commentaires -->
+<div class="modal fade" id="viewHistoryModal" tabindex="-1" aria-labelledby="viewHistoryModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-secondary text-white">
+                <h5 class="modal-title" id="viewHistoryModalLabel">
+                    <i class="bi bi-clock-history"></i> Historique des commentaires
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fermer"></button>
+            </div>
+            <div class="modal-body">
+                <div id="commentsHistory" class="comments-list">
+                    <!-- Les commentaires seront chargés ici dynamiquement -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal pour ajouter un commentaire -->
+<div class="modal fade" id="addCommentModal" tabindex="-1" aria-labelledby="addCommentModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form action="../controllers/tasks_controller.php" method="POST">
+                <input type="hidden" name="task_id" id="commentTaskId">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title" id="addCommentModalLabel">
+                        <i class="bi bi-chat-dots"></i> Ajouter un commentaire
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fermer"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="commentText" class="form-label">Commentaire</label>
+                        <textarea class="form-control" id="commentText" name="comment" rows="4" required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" name="add_comment" class="btn btn-success">Publier</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <script>
     document.addEventListener('DOMContentLoaded', () => {
         // Progress slider for add modal
@@ -456,6 +562,44 @@ include '../layouts/header.php';
                 document.getElementById('quickStatus').value = taskStatus;
                 document.getElementById('quickProgress').value = taskProgress;
                 quickProgressValue.textContent = `${taskProgress}%`;
+
+                // Gérer les restrictions de statut
+                const statusSelect = document.getElementById('quickStatus');
+                const options = statusSelect.options;
+
+                // Réinitialiser toutes les options
+                for (let i = 0; i < options.length; i++) {
+                    options[i].disabled = false;
+                }
+
+                // Désactiver les options en fonction du statut actuel
+                if (taskStatus === 'finished') {
+                    // Si terminé, on ne peut pas revenir en arrière
+                    for (let i = 0; i < options.length; i++) {
+                        if (options[i].value === 'To-do' || options[i].value === 'in progress') {
+                            options[i].disabled = true;
+                        }
+                    }
+                } else if (taskStatus === 'in progress') {
+                    // Si en cours, on ne peut pas revenir à "à faire"
+                    for (let i = 0; i < options.length; i++) {
+                        if (options[i].value === 'To-do') {
+                            options[i].disabled = true;
+                        }
+                    }
+                }
+
+                // Empêcher la diminution du progrès
+                const progressInput = document.getElementById('quickProgress');
+                progressInput.min = taskProgress; // Définir la valeur minimale comme le progrès actuel
+                
+                // Ajouter un événement pour empêcher la diminution manuelle
+                progressInput.addEventListener('input', function() {
+                    if (parseInt(this.value) < parseInt(taskProgress)) {
+                        this.value = taskProgress;
+                        quickProgressValue.textContent = `${taskProgress}%`;
+                    }
+                });
             });
         });
         
@@ -467,6 +611,41 @@ include '../layouts/header.php';
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
         document.getElementById('dueDateAdd').value = tomorrow.toISOString().split('T')[0];
+
+        // Gestionnaire pour le bouton de commentaire
+        document.querySelectorAll('.comment-btn').forEach(button => {
+            button.addEventListener('click', () => {
+                const taskId = button.getAttribute('data-task-id');
+                document.getElementById('commentTaskId').value = taskId;
+            });
+        });
+
+        // Gestionnaire pour le bouton d'historique
+        document.querySelectorAll('.view-history-btn').forEach(button => {
+            button.addEventListener('click', () => {
+                const taskId = button.getAttribute('data-task-id');
+                const commentsContainer = document.getElementById('commentsHistory');
+                
+                // Charger les commentaires via AJAX
+                fetch(`../controllers/tasks_controller.php?get_comments=${taskId}`)
+                    .then(response => response.json())
+                    .then(comments => {
+                        commentsContainer.innerHTML = comments.map(comment => `
+                            <div class="comment-item mb-3 p-3 border rounded">
+                                <div class="d-flex justify-content-between">
+                                    <strong>${comment.user_name}</strong>
+                                    <small class="text-muted">${comment.created_at}</small>
+                                </div>
+                                <p class="mb-0 mt-2">${comment.comment}</p>
+                            </div>
+                        `).join('');
+                    })
+                    .catch(error => {
+                        console.error('Erreur lors du chargement des commentaires:', error);
+                        commentsContainer.innerHTML = '<div class="alert alert-danger">Erreur lors du chargement des commentaires</div>';
+                    });
+            });
+        });
     });
 </script>
 
